@@ -59,6 +59,30 @@ when the data is live.
   (voltage/current/temps) can be added in a later version.
 - A sample Lovelace dashboard is in [`dashboard.yaml`](dashboard.yaml).
 
+## Custom Lovelace card
+
+This repo ships **`chr-dashboard-card`** (in `www/chr-dashboard-card.js`): the whole
+**status + history dashboard in a single card** — vehicle-state KPIs (fuel + range,
+HV battery, 12V health, fault codes), usage-history charts (speed activity, engine
+load, fuel-level trend, speed & RPM), and the 12V-voltage 14-day health trend with
+warning bands. Charts are drawn with Highcharts (loaded from CDN) and pull from HA's
+recorder; live values update from the `toyota_chr` entities.
+
+Add it to any dashboard with one line:
+```yaml
+type: custom:chr-dashboard-card
+```
+
+HACS registers the card resource automatically. If you installed manually:
+1. Copy `www/chr-dashboard-card.js` to `<HA config>/www/chr-dashboard-card.js`.
+2. Settings → Dashboards → (3-dot) → **Resources** → **+ Add resource**:
+   URL `/local/chr-dashboard-card.js`, type **JavaScript Module**.
+3. Add a card: `type: custom:chr-dashboard-card` (entity ids default to the
+   `toyota_chr` integration; override per the config keys if your slugs differ).
+
+The card builds its DOM + charts **once** and only updates values / pushes chart
+points on each state push, so the poll interval never causes flicker.
+
 ## Roadmap
 
 - [ ] Enhanced Toyota hybrid PIDs (HV current, pack temps) via Mode 21 / 7E2

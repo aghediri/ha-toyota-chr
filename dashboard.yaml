@@ -1,9 +1,18 @@
-# Toyota C-HR OBD — sample dashboard (v1.0.0 offline integration)
-# Entities come from the toyota_chr integration (domain-slugified names).
+# Toyota C-HR OBD — dashboard (v1.0.0)
+# The whole status + history layout is rendered by ONE custom card:
+#   custom:chr-dashboard-card  (ships in www/chr-dashboard-card.js)
+# Register it as a JavaScript Module resource first (HACS does this
+# automatically; manual steps in the README).
 title: C-HR
 views:
-  - title: C-HR OBD
+  - title: C-HR
     path: chr
+    cards:
+      - type: custom:chr-dashboard-card
+
+  # --- Fallback view using only built-in cards (no custom card / no HACS) ---
+  - title: C-HR (basic)
+    path: chr-basic
     cards:
       - type: glance
         title: Status
@@ -17,53 +26,13 @@ views:
             name: HV batt
           - entity: sensor.toyota_c_hr_fault_codes
             name: DTCs
-
-      - type: horizontal-stack
-        cards:
-          - type: gauge
-            name: Speed
-            entity: sensor.toyota_c_hr_speed
-            unit: km/h
-            min: 0
-            max: 180
-            needle: true
-          - type: gauge
-            name: RPM
-            entity: sensor.toyota_c_hr_engine_rpm
-            unit: rpm
-            min: 0
-            max: 7000
-            needle: true
-          - type: gauge
-            name: 12V
-            entity: sensor.toyota_c_hr_12v_battery
-            unit: V
-            min: 11
-            max: 15
-            severity: {red: 11, yellow: 12.2, green: 12.6}
-
-      - type: glance
-        title: Engine
-        columns: 4
-        entities:
-          - entity: sensor.toyota_c_hr_coolant_temp
-            name: Coolant
-          - entity: sensor.toyota_c_hr_intake_air_temp
-            name: Intake
-          - entity: sensor.toyota_c_hr_ambient_temp
-            name: Ambient
-          - entity: sensor.toyota_c_hr_engine_load
-            name: Load
-
-      - type: history-graph
-        title: Speed & RPM
-        hours_to_show: 2
-        entities:
-          - sensor.toyota_c_hr_speed
-          - sensor.toyota_c_hr_engine_rpm
-
       - type: history-graph
         title: 12V battery (watch for decline)
         hours_to_show: 336
         entities:
           - sensor.toyota_c_hr_12v_battery
+      - type: history-graph
+        title: Fuel level trend
+        hours_to_show: 720
+        entities:
+          - sensor.toyota_c_hr_fuel_level
