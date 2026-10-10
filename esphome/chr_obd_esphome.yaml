@@ -179,7 +179,7 @@ button:
 sensor:
   - platform: ble_elm327
     ble_elm327_id: obd_elm
-    name: "Toyota C-HR Engine RPM"
+    name: "Engine RPM"
     id: engine_rpm
     mode: "01"
     pid: "0C"
@@ -194,7 +194,7 @@ sensor:
 
   - platform: ble_elm327
     ble_elm327_id: obd_elm
-    name: "Toyota C-HR Speed"
+    name: "Speed"
     mode: "01"
     pid: "0D"
     update_interval: 10s
@@ -205,7 +205,7 @@ sensor:
 
   - platform: ble_elm327
     ble_elm327_id: obd_elm
-    name: "Toyota C-HR Coolant Temp"
+    name: "Coolant Temp"
     mode: "01"
     pid: "05"
     update_interval: 30s
@@ -216,7 +216,7 @@ sensor:
 
   - platform: ble_elm327
     ble_elm327_id: obd_elm
-    name: "Toyota C-HR Intake Air Temp"
+    name: "Intake Air Temp"
     mode: "01"
     pid: "0F"
     update_interval: 30s
@@ -227,7 +227,7 @@ sensor:
 
   - platform: ble_elm327
     ble_elm327_id: obd_elm
-    name: "Toyota C-HR Ambient Temp"
+    name: "Ambient Temp"
     mode: "01"
     pid: "46"
     update_interval: 60s
@@ -238,7 +238,7 @@ sensor:
 
   - platform: ble_elm327
     ble_elm327_id: obd_elm
-    name: "Toyota C-HR Engine Load"
+    name: "Engine Load"
     mode: "01"
     pid: "04"
     update_interval: 10s
@@ -249,7 +249,7 @@ sensor:
 
   - platform: ble_elm327
     ble_elm327_id: obd_elm
-    name: "Toyota C-HR Throttle"
+    name: "Throttle"
     mode: "01"
     pid: "11"
     update_interval: 10s
@@ -260,7 +260,7 @@ sensor:
 
   - platform: ble_elm327
     ble_elm327_id: obd_elm
-    name: "Toyota C-HR Fuel Level"
+    name: "Fuel Level"
     mode: "01"
     pid: "2F"
     update_interval: 60s
@@ -271,7 +271,7 @@ sensor:
 
   - platform: ble_elm327
     ble_elm327_id: obd_elm
-    name: "Toyota C-HR Fuel Rate"
+    name: "Fuel Rate"
     mode: "01"
     pid: "5E"
     update_interval: 10s
@@ -282,7 +282,7 @@ sensor:
 
   - platform: ble_elm327
     ble_elm327_id: obd_elm
-    name: "Toyota C-HR HV Battery SoC"
+    name: "HV Battery SoC"
     mode: "01"
     pid: "5B"
     update_interval: 30s
@@ -294,7 +294,7 @@ sensor:
 
   - platform: ble_elm327
     ble_elm327_id: obd_elm
-    name: "Toyota C-HR 12V Battery"
+    name: "12V Battery"
     mode: "01"
     pid: "42"
     update_interval: 30s
@@ -306,7 +306,7 @@ sensor:
 
   - platform: ble_elm327
     ble_elm327_id: obd_elm
-    name: "Toyota C-HR Distance Driven"
+    name: "Distance Driven"
     mode: "01"
     pid: "31"
     update_interval: 30s
@@ -317,7 +317,7 @@ sensor:
 
   # ---------- Connectivity / sync health -------------------------------------
   - platform: wifi_signal
-    name: "Toyota C-HR WiFi Signal"
+    name: "WiFi Signal"
     id: wifi_signal_db
     unit_of_measurement: "dBm"
     device_class: signal_strength
@@ -326,7 +326,7 @@ sensor:
 
   - platform: copy
     source_id: wifi_signal_db
-    name: "Toyota C-HR WiFi Signal %"
+    name: "WiFi Signal %"
     filters:
       - lambda: |-
           if (x <= -100.0) return 0.0;
@@ -336,7 +336,7 @@ sensor:
     entity_category: diagnostic
 
   - platform: uptime
-    name: "Toyota C-HR ESP32 Uptime"
+    name: "ESP32 Uptime"
     entity_category: diagnostic
 
 # =============================================================================
@@ -344,19 +344,20 @@ sensor:
 # =============================================================================
 binary_sensor:
   - platform: status
-    name: "Toyota C-HR Online"
+    name: "Online"
     id: car_online
 
   # "In range" = the BLE client is connected to the dongle. Because the MAC is
-  # entered at runtime from the HA UI, we track the ble_client connection state
-  # rather than a fixed-MAC ble_presence scan.
-  - platform: ble_client
-    ble_client_id: obd_client
-    name: "Toyota C-HR In Range"
+  # entered at runtime from the HA UI, we read the connection state in a
+  # template (ble_client has no binary_sensor platform in this component).
+  - platform: template
+    name: "In Range"
     id: dongle_in_range
+    device_class: connectivity
+    lambda: 'return id(obd_client).connected();' 
 
   - platform: template
-    name: "Toyota C-HR Engine Running"
+    name: "Engine Running"
     id: engine_running
     device_class: running
     lambda: |-
@@ -366,7 +367,7 @@ binary_sensor:
   # DATA FRESH = a real PID (RPM) arrived within the last 30 s. Distinguishes
   # "BLE connected but silent" (car asleep / wrong UUIDs) from "data flowing".
   - platform: template
-    name: "Toyota C-HR Data Fresh"
+    name: "Data Fresh"
     id: data_fresh
     device_class: connectivity
     entity_category: diagnostic
@@ -376,14 +377,14 @@ binary_sensor:
 
 text_sensor:
   - platform: template
-    name: "Toyota C-HR Last Synced"
+    name: "Last Synced"
     id: last_synced
     icon: "mdi:cloud-sync"
     entity_category: diagnostic
 
   # ONE-LINE connectivity verdict so you know exactly where to troubleshoot.
   - platform: template
-    name: "Toyota C-HR Connection Status"
+    name: "Connection Status"
     id: conn_status
     icon: "mdi:lan-connect"
     entity_category: diagnostic
