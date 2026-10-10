@@ -1,0 +1,174 @@
+# ============================================================================
+#  TOYOTA C-HR  -  HOME ASSISTANT LOGIC PACKAGE
+#  This is where ALL the intelligence lives. The ESP32 bridge only emits raw
+#  decoded numbers (sensor.toyota_c_hr_*). Everything derived - trips, economy,
+#  distance rollups, estimated range, cost, alerts - is computed HERE in HA.
+# ----------------------------------------------------------------------------
+#  INSTALL (packages method, keeps your configuration.yaml clean):
+#    1. In <HA config>/configuration.yaml, ensure you have:
+#         homeassistant:
+#           packages: !include_dir_named packages
+#    2. Copy this file to  <HA config>/packages/chr_obd.yaml
+#    3. Developer Tools -> YAML -> Check config -> Restart.
+#
+#  ENTITY STANDARD: everything keys off sensor.toyota_c_hr_* from the firmware.
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# 1) DAILY / WEEKLY / MONTHLY distance + fuel rollups
+#    distance_driven is an accumulating meter from the firmware; utility_meter
+#    slices it into calendar buckets for clean bar charts.
+# ---------------------------------------------------------------------------
+utility_meter:
+  toyota_c_hr_distance_daily:
+    source: sensor.toyota_c_hr_distance_driven
+    cycle: daily
+    name: Toyota C-HR Distance Daily
+  toyota_c_hr_distance_weekly:
+    source: sensor.toyota_c_hr_distance_driven
+    cycle: weekly
+    name: Toyota C-HR Distance Weekly
+  toyota_c_hr_distance_monthly:
+    source: sensor.toyota_c_hr_distance_driven
+    cycle: monthly
+    name: Toyota C-HR Distance Monthly
+  toyota_c_hr_fuel_used_daily:
+    source: sensor.toyota_c_hr_fuel_used_liters
+    cycle: daily
+    name: Toyota C-HR Fuel Used Daily
+  toyota_c_hr_fuel_used_monthly:
+    source: sensor.toyota_c_hr_fuel_used_liters
+    cycle: monthly
+    name: Toyota C-HR Fuel Used Monthly
+
+# ---------------------------------------------------------------------------
+# 2) Derived sensors: liters consumed, smoothed economy, estimated range,
+#    weekly fuel cost.
+# ---------------------------------------------------------------------------
+sensor:
+  # Integrate fuel rate (L/h) over time -> liters consumed.
+  - platform: integration
+    source: sensor.toyota_c_hr_fuel_rate
+    name: Toyota C-HR Fuel Used Liters
+    unique_id: toyota_c_hr_fuel_used_liters
+    round: 2
+    method: trapezoidal
+    unit_time: h
+
+  # Smoothed economy (L/100km) from instantaneous rate + speed, 5-min average.
+  - platform: filter
+    name: Toyota C-HR Economy Smoothed
+    unique_id: toyota_c_hr_economy_smoothed
+    entity_id: sensor.toyota_c_hr_economy_instant
+    filters:
+      - filter: time_simple_moving_average
+        window_size: "00:05"
+        precision: 1
+
+  - platform: template
+    sensors:
+      # Instantaneous L/100km from fuel rate (L/h) and speed (km/h).
+      toyota_c_hr_economy_instant:
+        friendly_name: "Toyota C-HR Economy (instant)"
+        unit_of_measurement: "L/100km"
+        value_template: >-
+          {% set rate = states('sensor.toyota_c_hr_fuel_rate') | float(0) %}
+          {% set spd = states('sensor.toyota_c_hr_speed') | float(0) %}
+          {% if spd > 3 %}{{ (rate / spd * 100.0) | round(1) }}{% else %}0{% endif %}
+
+      # Estimated range from fuel % (C-HR hybrid ~43 L tank).
+      toyota_c_hr_estimated_range:
+        friendly_name: "Toyota C-HR Estimated Range"
+        unit_of_measurement: "km"
+        value_template: >-
+          {% set tank = 43.0 %}
+          {% set econ = states('sensor.toyota_c_hr_economy_smoothed') | float(4.8) %}
+          {% set pct = states('sensor.toyota_c_hr_fuel_level') | float(0) %}
+          {% if econ > 0 %}{{ ((tank * pct/100.0) / econ * 100.0) | round(0) }}{% else %}0{% endif %}
+
+      # Weekly fuel cost estimate (tune price per liter below).
+      toyota_c_hr_fuel_cost_weekly:
+        friendly_name: "Toyota C-HR Fuel Cost (this week)"
+        unit_of_measurement: "€"
+        value_template: >-
+          {% set price = 1.85 %}   {# €/L - adjust to your local price #}
+          {% set liters = states('sensor.toyota_c_hr_fuel_used_daily') | float(0) %}
+          {{ (liters * price) | round(2) }}
+
+# ---------------------------------------------------------------------------
+# 3) PER-TRIP tracking (km per trip + economy per trip).
+#    Trip = engine on -> engine off (binary_sensor.toyota_c_hr_engine_running
+#    comes from the firmware). Snapshot distance/fuel at start, delta at end.
+# ---------------------------------------------------------------------------
+template:
+  - trigger:
+      - platform: state
+        entity_id: binary_sensor.toyota_c_hr_engine_running
+        from: "off"
+        to: "on"
+    sensor:
+      - name: "Toyota C-HR Trip Start Distance"
+        unique_id: toyota_c_hr_trip_start_distance
+        state: "{{ states('sensor.toyota_c_hr_distance_driven') | float(0) }}"
+        unit_of_measurement: "km"
+      - name: "Toyota C-HR Trip Start Fuel"
+        unique_id: toyota_c_hr_trip_start_fuel
+        state: "{{ states('sensor.toyota_c_hr_fuel_used_liters') | float(0) }}"
+        unit_of_measurement: "L"
+
+  - trigger:
+      - platform: state
+        entity_id: binary_sensor.toyota_c_hr_engine_running
+        from: "on"
+        to: "off"
+    sensor:
+      - name: "Toyota C-HR Last Trip Distance"
+        unique_id: toyota_c_hr_last_trip_distance
+        unit_of_measurement: "km"
+        device_class: distance
+        state: >-
+          {{ (states('sensor.toyota_c_hr_distance_driven') | float(0)
+             - states('sensor.toyota_c_hr_trip_start_distance') | float(0)) | round(1) }}
+      - name: "Toyota C-HR Last Trip Economy"
+        unique_id: toyota_c_hr_last_trip_economy
+        unit_of_measurement: "L/100km"
+        state: >-
+          {% set km = (states('sensor.toyota_c_hr_distance_driven') | float(0)
+                       - states('sensor.toyota_c_hr_trip_start_distance') | float(0)) %}
+          {% set used = (states('sensor.toyota_c_hr_fuel_used_liters') | float(0)
+                         - states('sensor.toyota_c_hr_trip_start_fuel') | float(0)) %}
+          {% if km > 0.5 %}{{ (used / km * 100.0) | round(1) }}{% else %}0{% endif %}
+
+# ---------------------------------------------------------------------------
+# 4) ALERTS - low 12V battery (parked-battery drain is the #1 C-HR worry).
+# ---------------------------------------------------------------------------
+automation:
+  - alias: "Toyota C-HR - 12V battery low warning"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.toyota_c_hr_12v_battery
+        below: 12.2
+        for: "00:10:00"
+    condition:
+      - condition: state
+        entity_id: binary_sensor.toyota_c_hr_engine_running
+        state: "off"
+    action:
+      - service: persistent_notification.create
+        data:
+          title: "Toyota C-HR: 12V battery low"
+          message: >-
+            12V battery is {{ states('sensor.toyota_c_hr_12v_battery') }} V while
+            parked. Below ~12.2 V sustained may mean a parasitic drain - consider
+            a drive or a charger.
+          notification_id: chr_12v_low
+
+# ---------------------------------------------------------------------------
+# NOTES
+#  - Fuel-rate PID (015E) is not supported on every C-HR. If sensor.
+#    toyota_c_hr_fuel_rate stays unavailable, the liters/economy chain won't
+#    populate; fall back to fuel-% drop over distance for economy.
+#  - utility_meter buckets survive restarts and reset on their cycle, so the
+#    daily/weekly/monthly bars stay long-term accurate.
+#  - Adjust tank size (43 L), €/L (1.85), and economy default (4.8) to taste.
+# ---------------------------------------------------------------------------

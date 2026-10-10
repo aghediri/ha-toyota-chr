@@ -1,0 +1,184 @@
+# ============================================================================
+#  TOYOTA C-HR  -  STATUS + HISTORY DASHBOARD
+#  Built-in cards only (no HACS required) -> cannot white-screen.
+#  All entities are sensor.toyota_c_hr_* (matches the ESPHome firmware).
+# ----------------------------------------------------------------------------
+#  INSTALL: Settings -> Dashboards -> New dashboard -> open it -> Edit ->
+#    (3-dot menu) -> Raw configuration editor -> paste this whole file -> Save.
+#  Designed for a PARKED car: shows last-known values + long-term history,
+#  not a live cockpit (the car is only connected while awake / in WiFi range).
+# ============================================================================
+title: C-HR
+views:
+  - title: Status & History
+    path: chr
+    cards:
+      # ---- Header: connection health -------------------------------------
+      - type: markdown
+        content: >
+          ## Toyota C-HR — Status & History
+          {% if is_state('binary_sensor.toyota_c_hr_in_range','on') %}🟢 In range{% else %}⚪ Asleep / parked{% endif %}
+          · Last synced {{ states('sensor.toyota_c_hr_last_synced') }}
+          · WiFi {{ states('sensor.toyota_c_hr_wifi_signal_percent') }}%
+
+      # ---- Connectivity troubleshooting (watch during flash & test) -------
+      - type: markdown
+        content: >
+          ### 🔌 Connectivity
+          **{{ states('sensor.toyota_c_hr_connection_status') }}**
+
+      - type: glance
+        title: Link status — where to troubleshoot
+        show_name: true
+        show_state: true
+        columns: 3
+        entities:
+          - entity: binary_sensor.toyota_c_hr_online
+            name: ESP32 → HA
+          - entity: binary_sensor.toyota_c_hr_in_range
+            name: OBD → ESP32
+          - entity: binary_sensor.toyota_c_hr_data_fresh
+            name: Data flowing
+
+      - type: entities
+        title: Link detail
+        entities:
+          - entity: sensor.toyota_c_hr_wifi_signal
+            name: WiFi signal (dBm)
+          - entity: sensor.toyota_c_hr_wifi_signal_percent
+            name: WiFi signal (%)
+          - entity: sensor.toyota_c_hr_last_synced
+            name: Last synced (ESP32 → HA)
+          - entity: sensor.toyota_c_hr_esp32_uptime
+            name: ESP32 uptime
+
+      # ---- KPI gauges -----------------------------------------------------
+      - type: horizontal-stack
+        cards:
+          - type: gauge
+            name: Fuel
+            entity: sensor.toyota_c_hr_fuel_level
+            unit: "%"
+            min: 0
+            max: 100
+            severity: {red: 0, yellow: 15, green: 40}
+          - type: gauge
+            name: HV Battery
+            entity: sensor.toyota_c_hr_hv_battery_soc
+            unit: "%"
+            min: 0
+            max: 100
+          - type: gauge
+            name: 12V Battery
+            entity: sensor.toyota_c_hr_12v_battery
+            unit: V
+            min: 11
+            max: 15
+            severity: {red: 11, yellow: 12.2, green: 12.6}
+
+      # ---- Trip + range glance -------------------------------------------
+      - type: glance
+        title: At a glance
+        columns: 3
+        entities:
+          - entity: sensor.toyota_c_hr_estimated_range
+            name: Range
+          - entity: sensor.toyota_c_hr_last_trip_distance
+            name: Last trip
+          - entity: sensor.toyota_c_hr_last_trip_economy
+            name: Trip L/100
+          - entity: sensor.toyota_c_hr_distance_daily
+            name: Today km
+          - entity: sensor.toyota_c_hr_economy_smoothed
+            name: Economy
+          - entity: sensor.toyota_c_hr_fuel_cost_weekly
+            name: Fuel €/day
+
+      # ---- History: distance per day -------------------------------------
+      - type: history-graph
+        title: Distance per day
+        hours_to_show: 336
+        entities:
+          - sensor.toyota_c_hr_distance_daily
+
+      # ---- History: economy ----------------------------------------------
+      - type: history-graph
+        title: Economy (L/100km) — 7 days
+        hours_to_show: 168
+        entities:
+          - sensor.toyota_c_hr_economy_smoothed
+
+      # ---- History: 12V health (the parked-battery watch) ----------------
+      - type: history-graph
+        title: 12V battery — 14 days (watch for decline)
+        hours_to_show: 336
+        entities:
+          - sensor.toyota_c_hr_12v_battery
+
+      # ---- History: fuel level -------------------------------------------
+      - type: history-graph
+        title: Fuel level trend — 7 days
+        hours_to_show: 168
+        entities:
+          - sensor.toyota_c_hr_fuel_level
+
+      # ---- Diagnostics + last readings -----------------------------------
+      - type: entities
+        title: Diagnostics & last readings
+        entities:
+          - entity: binary_sensor.toyota_c_hr_in_range
+            name: Dongle in range
+          - entity: binary_sensor.toyota_c_hr_engine_running
+            name: Engine running
+          - entity: sensor.toyota_c_hr_coolant_temp
+            name: Coolant
+          - entity: sensor.toyota_c_hr_intake_air_temp
+            name: Intake
+          - entity: sensor.toyota_c_hr_ambient_temp
+            name: Ambient
+          - entity: sensor.toyota_c_hr_throttle
+            name: Throttle
+          - entity: sensor.toyota_c_hr_wifi_signal
+            name: WiFi signal
+          - entity: sensor.toyota_c_hr_esp32_uptime
+            name: ESP32 uptime
+          - entity: sensor.toyota_c_hr_last_synced
+            name: Last synced
+
+  # ---- Optional live view (only meaningful while driving) ---------------
+  - title: Live (when driving)
+    path: chr-live
+    cards:
+      - type: horizontal-stack
+        cards:
+          - type: gauge
+            name: Speed
+            entity: sensor.toyota_c_hr_speed
+            unit: km/h
+            min: 0
+            max: 180
+          - type: gauge
+            name: RPM
+            entity: sensor.toyota_c_hr_engine_rpm
+            unit: rpm
+            min: 0
+            max: 6000
+          - type: gauge
+            name: Load
+            entity: sensor.toyota_c_hr_engine_load
+            unit: "%"
+            min: 0
+            max: 100
+      - type: history-graph
+        title: Speed & RPM — last hour
+        hours_to_show: 1
+        entities:
+          - sensor.toyota_c_hr_speed
+          - sensor.toyota_c_hr_engine_rpm
+      - type: history-graph
+        title: Temperatures — last 2 hours
+        hours_to_show: 2
+        entities:
+          - sensor.toyota_c_hr_coolant_temp
+          - sensor.toyota_c_hr_intake_air_temp
+          - sensor.toyota_c_hr_ambient_temp

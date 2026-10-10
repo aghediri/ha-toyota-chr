@@ -1,0 +1,13 @@
+# Never commit filled-in secrets — only secrets.example.yaml belongs in git.
+secrets.yaml
+**/secrets.yaml
+
+# ESPHome build artifacts
+.esphome/
+*.bin
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
